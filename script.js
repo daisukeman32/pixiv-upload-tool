@@ -3,6 +3,29 @@
 
   var MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
   var LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  var STORAGE_KEY = 'pixivoon_used_files';
+
+  // ============================================================
+  // Usage history (localStorage)
+  // ============================================================
+  function getUsedFiles() {
+    try {
+      var arr = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      return new Set(arr);
+    } catch (e) {
+      return new Set();
+    }
+  }
+
+  function addUsedFiles(filenames) {
+    var used = getUsedFiles();
+    filenames.forEach(function (name) { used.add(name); });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(used)));
+  }
+
+  function clearUsedFiles() {
+    localStorage.removeItem(STORAGE_KEY);
+  }
 
   // ============================================================
   // State
@@ -58,6 +81,7 @@
 
   var themeToggle = document.getElementById('theme-toggle');
   var editorToolbar = document.getElementById('editor-toolbar');
+  var clearHistoryBtn = document.getElementById('clear-history-btn');
 
   // ============================================================
   // Theme (toggle switch: checked = Day, unchecked = Night)
@@ -125,6 +149,11 @@
     renderStep1();
   });
 
+  clearHistoryBtn.addEventListener('click', function () {
+    clearUsedFiles();
+    renderStep1();
+  });
+
   function getMaxCount() {
     var v = parseInt(selectCountInput.value, 10);
     return (v > 0 && v <= 26) ? v : 10;
@@ -132,8 +161,13 @@
 
   randomSelectBtn.addEventListener('click', function () {
     var max = getMaxCount();
+    var usedFiles = getUsedFiles();
+    // Exclude used files from random selection
     var indices = [];
-    for (var i = 0; i < allFiles.length; i++) indices.push(i);
+    for (var i = 0; i < allFiles.length; i++) {
+      if (!usedFiles.has(allFiles[i].name)) indices.push(i);
+    }
+    // Fisher-Yates shuffle
     for (var j = indices.length - 1; j > 0; j--) {
       var k = Math.floor(Math.random() * (j + 1));
       var tmp = indices[j]; indices[j] = indices[k]; indices[k] = tmp;
@@ -145,6 +179,9 @@
 
   function renderStep1() {
     var max = getMaxCount();
+    var usedFiles = getUsedFiles();
+    var usedCount = 0;
+
     loadedCount.textContent = '読み込んだ画像: ' + allFiles.length + '枚';
     randomSelectBtn.disabled = allFiles.length === 0;
     clearAllBtn.hidden = allFiles.length === 0;
@@ -153,9 +190,16 @@
 
     allThumbnails.innerHTML = '';
     allFiles.forEach(function (file, i) {
+      var isUsed = usedFiles.has(file.name);
+      if (isUsed) usedCount++;
+
+      var wrap = document.createElement('div');
+      wrap.className = 'thumb-wrap';
+
       var img = document.createElement('img');
       img.className = 'sel-thumb';
       if (selectedIndices.indexOf(i) >= 0) img.classList.add('selected');
+      if (isUsed) img.classList.add('used');
       img.src = URL.createObjectURL(file);
       img.alt = file.name;
       img.addEventListener('click', function () {
@@ -168,8 +212,26 @@
         }
         renderStep1();
       });
-      allThumbnails.appendChild(img);
+
+      wrap.appendChild(img);
+
+      if (isUsed) {
+        var mark = document.createElement('span');
+        mark.className = 'used-mark';
+        mark.textContent = '済';
+        wrap.appendChild(mark);
+      }
+
+      allThumbnails.appendChild(wrap);
     });
+
+    // Show used count if any
+    if (usedCount > 0) {
+      loadedCount.textContent += ' (使用済み: ' + usedCount + '枚)';
+    }
+
+    // Show clear history button if there's any history
+    clearHistoryBtn.hidden = usedFiles.size === 0;
   }
 
   selectCountInput.addEventListener('change', function () {
@@ -728,6 +790,9 @@
       lastZipBlob = zipBlob;
       step3Progress.hidden = true;
       downloadBtn.hidden = false;
+      // Save used filenames to history
+      var usedFilenames = selectedIndices.map(function (i) { return allFiles[i].name; });
+      addUsedFiles(usedFilenames);
       downloadZip();
     }).catch(function (err) {
       console.error(err);

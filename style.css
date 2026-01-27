@@ -283,6 +283,38 @@ main {
   opacity: 1;
 }
 
+/* ========== Thumb wrapper (for used-mark overlay) ========== */
+.thumb-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.sel-thumb.used {
+  opacity: 0.25;
+}
+
+.sel-thumb.used.selected {
+  opacity: 0.75;
+  border-color: var(--selected);
+}
+
+.used-mark {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 9px;
+  line-height: 1;
+  padding: 2px 3px;
+  pointer-events: none;
+}
+
+body.dark .used-mark {
+  background: rgba(255, 255, 255, 0.5);
+  color: #000;
+}
+
 /* ========== Buttons ========== */
 button {
   font-family: inherit;
