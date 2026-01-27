@@ -815,8 +815,8 @@
         top = Math.round(faceBottom);
         left = Math.round(faceCX - size / 2);
       } else {
-        // Portrait: crop from jaw line (chin area), 1000px
-        size = 1000;
+        // Portrait: tight crop from jaw line (chin area)
+        size = Math.min(800, imgW);
         var chinY = faceBox.y + faceBox.height * 0.85;
         top = Math.round(chinY);
         left = Math.round(faceCX - size / 2);
