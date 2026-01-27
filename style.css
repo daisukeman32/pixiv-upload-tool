@@ -15,6 +15,7 @@
   --btn-text: #FFFFFF;
   --drop-bg: #FAFAFA;
   --selected: #0066FF;
+  --header-h: 53px;
 }
 
 body.dark {
@@ -28,7 +29,7 @@ body.dark {
 }
 
 body {
-  font-family: 'Inter', 'Noto Sans JP', sans-serif;
+  font-family: 'Space Grotesk', 'Zen Kaku Gothic New', sans-serif;
   font-weight: 400;
   background: var(--bg);
   color: var(--text);
@@ -36,13 +37,22 @@ body {
   transition: background 0.2s, color 0.2s;
 }
 
-/* Header */
+/* ========== Top bar (fixed) ========== */
+#top-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
 header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 32px;
-  border-bottom: 1px solid var(--border);
+  padding: 14px 32px;
 }
 
 header h1 {
@@ -50,32 +60,131 @@ header h1 {
   font-weight: 600;
 }
 
-#theme-toggle {
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--text);
-  width: 36px;
-  height: 36px;
-  border-radius: 2px;
-  font-size: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.version {
+  font-size: 11px;
+  font-weight: 400;
+  opacity: 0.4;
+  margin-left: 4px;
 }
 
-body .icon-dark { display: none; }
-body .icon-light { display: inline; }
-body.dark .icon-dark { display: inline; }
-body.dark .icon-light { display: none; }
+/* ========== Toggle switch ========== */
+.theme-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: default;
+}
 
-/* Main */
+.theme-label {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.5;
+  user-select: none;
+}
+
+.theme-switch input {
+  display: none;
+}
+
+.toggle-track {
+  position: relative;
+  width: 40px;
+  height: 20px;
+  background: var(--text);
+  border-radius: 10px;
+  transition: background 0.2s;
+}
+
+.toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: var(--bg);
+  border-radius: 50%;
+  transition: left 0.2s;
+}
+
+.theme-switch input:checked ~ .toggle-track .toggle-thumb {
+  left: 22px;
+}
+
+/* ========== Editor toolbar (inside top-bar) ========== */
+#editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+#editor-toolbar[hidden] {
+  display: none;
+}
+
+#editor-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-right: 8px;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.toolbar-label {
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.toolbar-label input[type="range"] {
+  width: 80px;
+}
+
+.toolbar-label select {
+  font-family: inherit;
+  font-size: 11px;
+  padding: 2px 4px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.toolbar-label span {
+  min-width: 24px;
+  text-align: right;
+}
+
+#editor-toolbar button {
+  padding: 5px 14px;
+  font-size: 11px;
+}
+
+.toolbar-nav {
+  margin-left: auto;
+}
+
+.toolbar-nav button {
+  font-weight: 600;
+}
+
+/* ========== Main ========== */
 main {
   max-width: 900px;
   margin: 0 auto;
   padding: 32px 24px;
+  padding-top: calc(var(--header-h) + 32px);
 }
 
-/* Steps */
+/* ========== Steps ========== */
 .step h2 {
   font-size: 16px;
   font-weight: 600;
@@ -96,7 +205,7 @@ main {
   flex-wrap: wrap;
 }
 
-/* Drop zone */
+/* ========== Drop zone ========== */
 #drop-zone {
   border: 2px dashed var(--border);
   background: var(--drop-bg);
@@ -126,7 +235,7 @@ main {
   margin-top: 4px;
 }
 
-/* Counts */
+/* ========== Counts ========== */
 #loaded-count,
 #selected-count {
   font-size: 13px;
@@ -152,7 +261,7 @@ main {
   text-align: center;
 }
 
-/* All thumbnails grid (step 1) */
+/* ========== All thumbnails grid ========== */
 #all-thumbnails {
   display: flex;
   flex-wrap: wrap;
@@ -174,7 +283,7 @@ main {
   opacity: 1;
 }
 
-/* Buttons */
+/* ========== Buttons ========== */
 button {
   font-family: inherit;
   font-size: 13px;
@@ -201,7 +310,7 @@ button.primary:disabled {
   opacity: 0.25;
 }
 
-/* Mosaic grid (step 2) */
+/* ========== Mosaic grid (step 2) ========== */
 #mosaic-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -255,94 +364,49 @@ button.primary:disabled {
   border-color: var(--warn);
 }
 
-/* Editor overlay */
+/* ========== Editor overlay (canvas area below top-bar) ========== */
 #editor-overlay {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   background: var(--bg);
   z-index: 100;
-  flex-direction: column;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  padding-top: 100px; /* space for fixed header + toolbar */
 }
 
 #editor-overlay[hidden] {
   display: none;
 }
 
-#editor-overlay:not([hidden]) {
-  display: flex;
-}
-
-#editor-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  flex-wrap: wrap;
-}
-
-#editor-title {
-  font-weight: 600;
-  font-size: 14px;
-  margin-right: 8px;
-}
-
-.toolbar-group {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.toolbar-label {
-  font-size: 11px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  white-space: nowrap;
-}
-
-.toolbar-label input[type="range"] {
-  width: 80px;
-}
-
-.toolbar-label select {
-  font-family: inherit;
-  font-size: 11px;
-  padding: 2px 4px;
-  background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--border);
-}
-
-.toolbar-label span {
-  min-width: 24px;
-  text-align: right;
-}
-
-#editor-toolbar button {
-  padding: 5px 14px;
-  font-size: 11px;
-}
-
-#editor-body {
-  flex: 1;
-  overflow: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 12px;
-}
-
 #editor-canvas {
   max-width: 100%;
   max-height: 100%;
   border: 1px solid var(--border);
-  cursor: crosshair;
+  cursor: none;
 }
 
-/* Progress */
+/* ========== Brush cursor ========== */
+#brush-cursor {
+  position: fixed;
+  border: 1.5px solid rgba(255, 0, 0, 0.7);
+  border-radius: 50%;
+  pointer-events: none;
+  display: none;
+  transform: translate(-50%, -50%);
+  z-index: 110;
+}
+
+body.dark #brush-cursor {
+  border-color: rgba(255, 100, 100, 0.8);
+}
+
+/* ========== Progress ========== */
 .progress-bar {
   width: 100%;
   height: 4px;
@@ -366,7 +430,7 @@ button.primary:disabled {
   opacity: 0.6;
 }
 
-/* Results (step 3) */
+/* ========== Results (step 3) ========== */
 #result-list {
   display: flex;
   flex-direction: column;
@@ -403,7 +467,7 @@ button.primary:disabled {
   color: var(--warn);
 }
 
-/* Notes */
+/* ========== Notes ========== */
 .note {
   margin-top: 24px;
   font-size: 12px;

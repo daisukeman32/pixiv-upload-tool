@@ -40,6 +40,9 @@
   var editorReset = document.getElementById('editor-reset');
   var editorUndo = document.getElementById('editor-undo');
   var editorDone = document.getElementById('editor-done');
+  var editorPrev = document.getElementById('editor-prev');
+  var editorSkip = document.getElementById('editor-skip');
+  var brushCursor = document.getElementById('brush-cursor');
   var brushModeSelect = document.getElementById('brush-mode');
   var brushSizeInput = document.getElementById('brush-size');
   var brushSizeVal = document.getElementById('brush-size-val');
@@ -54,16 +57,23 @@
   var restartBtn = document.getElementById('restart-btn');
 
   var themeToggle = document.getElementById('theme-toggle');
+  var editorToolbar = document.getElementById('editor-toolbar');
 
   // ============================================================
-  // Theme
+  // Theme (toggle switch: checked = Day, unchecked = Night)
   // ============================================================
-  themeToggle.addEventListener('click', function () {
-    document.body.classList.toggle('dark');
-    localStorage.setItem('theme', document.body.classList.contains('dark') ? 'dark' : 'light');
+  themeToggle.addEventListener('change', function () {
+    if (themeToggle.checked) {
+      document.body.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    } else {
+      document.body.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    }
   });
   if (localStorage.getItem('theme') === 'dark') {
     document.body.classList.add('dark');
+    themeToggle.checked = false;
   }
 
   // ============================================================
@@ -200,6 +210,10 @@
         toStep3Btn.disabled = false;
         skipMosaicBtn.disabled = false;
         renderMosaicGrid();
+        // Auto-open editor starting from first image
+        if (imageData.length > 0) {
+          openEditor(0);
+        }
       })
       .catch(function (err) {
         console.error(err);
@@ -238,13 +252,7 @@
 
       var label = document.createElement('div');
       label.className = 'label';
-      label.textContent = (idx + 1);
-
-      var badge = document.createElement('div');
-      if (!data.faceBox) {
-        badge.className = 'badge-none';
-        badge.textContent = '顔未検出（中央クロップ）';
-      }
+      label.textContent = String(idx + 1).padStart(2, '0');
 
       var actions = document.createElement('div');
       actions.className = 'card-actions';
@@ -272,7 +280,6 @@
 
       card.appendChild(img);
       card.appendChild(label);
-      card.appendChild(badge);
       card.appendChild(actions);
 
       mosaicGrid.appendChild(card);
@@ -298,25 +305,92 @@
   function openEditor(idx) {
     editorIdx = idx;
     var data = imageData[idx];
-    editorTitle.textContent = '編集中: ' + (idx + 1);
+    editorTitle.textContent = '編集中: ' + String(idx + 1).padStart(2, '0') + ' / ' + String(imageData.length).padStart(2, '0');
 
     editorCanvas.width = data.mosaicCanvas.width;
     editorCanvas.height = data.mosaicCanvas.height;
     editorCanvas.getContext('2d').drawImage(data.mosaicCanvas, 0, 0);
 
     data.undoStack = [cloneCanvasData(data.mosaicCanvas)];
+    var isFirst = idx === 0;
+    var isLast = idx + 1 >= imageData.length;
+    editorPrev.disabled = isFirst;
+    editorDone.textContent = isLast ? '決定 [S]' : '決定 → [S]';
+    editorSkip.textContent = isLast ? '送り [D]' : '送り → [D]';
     editorOverlay.hidden = false;
+    editorToolbar.hidden = false;
+    requestAnimationFrame(updateBrushCursorSize);
   }
 
-  editorDone.addEventListener('click', function () {
+  // ---- Editor navigation helpers ----
+  function editorSaveCurrent() {
     if (!editorActive()) return;
     var data = imageData[editorIdx];
     data.mosaicCanvas.getContext('2d').drawImage(editorCanvas, 0, 0);
     data.undoStack = [];
+  }
+
+  function editorCloseAndOpen(nextIdx) {
     editorIdx = -1;
     painting = false;
+    hideBrushCursor();
     editorOverlay.hidden = true;
+    editorToolbar.hidden = true;
     renderMosaicGrid();
+    if (nextIdx >= 0 && nextIdx < imageData.length) {
+      openEditor(nextIdx);
+    }
+  }
+
+  // S / Up / Done button: save edits → advance to next
+  function editorConfirmNext() {
+    if (!editorActive()) return;
+    var next = editorIdx + 1;
+    editorSaveCurrent();
+    editorCloseAndOpen(next);
+  }
+
+  // D / Right: skip forward without saving
+  function editorSkipNext() {
+    if (!editorActive()) return;
+    var next = editorIdx + 1;
+    imageData[editorIdx].undoStack = [];
+    editorCloseAndOpen(next);
+  }
+
+  // A / Left: save edits → go back to previous
+  function editorGoBack() {
+    if (!editorActive()) return;
+    var prev = editorIdx - 1;
+    editorSaveCurrent();
+    editorCloseAndOpen(prev);
+  }
+
+  editorDone.addEventListener('click', editorConfirmNext);
+  editorPrev.addEventListener('click', editorGoBack);
+  editorSkip.addEventListener('click', editorSkipNext);
+
+  // Keyboard shortcuts (only when editor is open)
+  document.addEventListener('keydown', function (e) {
+    if (!editorActive()) return;
+    // Ignore if focused on an input/select
+    var tag = document.activeElement && document.activeElement.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
+    switch (e.key) {
+      case 's': case 'S': case 'ArrowUp':
+        e.preventDefault();
+        editorConfirmNext();
+        break;
+      case 'd': case 'D': case 'ArrowRight':
+        e.preventDefault();
+        editorSkipNext();
+        break;
+      case 'a': case 'A': case 'ArrowLeft':
+        e.preventDefault();
+        editorGoBack();
+        break;
+    }
   });
 
   editorReset.addEventListener('click', function () {
@@ -340,9 +414,42 @@
   // Slider labels
   brushSizeInput.addEventListener('input', function () {
     brushSizeVal.textContent = brushSizeInput.value;
+    updateBrushCursorSize();
   });
   effectStrengthInput.addEventListener('input', function () {
     effectStrengthVal.textContent = effectStrengthInput.value;
+  });
+
+  // ---- Brush cursor visual ----
+  function updateBrushCursorSize() {
+    if (!editorActive()) return;
+    var r = parseInt(brushSizeInput.value, 10) || 50;
+    // Convert canvas pixels to screen pixels
+    var rect = editorCanvas.getBoundingClientRect();
+    var scale = rect.width / editorCanvas.width;
+    var screenDia = r * 2 * scale;
+    brushCursor.style.width = screenDia + 'px';
+    brushCursor.style.height = screenDia + 'px';
+  }
+
+  function showBrushCursor(e) {
+    brushCursor.style.display = 'block';
+    brushCursor.style.left = e.clientX + 'px';
+    brushCursor.style.top = e.clientY + 'px';
+  }
+
+  function hideBrushCursor() {
+    brushCursor.style.display = 'none';
+  }
+
+  editorCanvas.addEventListener('mouseenter', function (e) {
+    if (!editorActive()) return;
+    updateBrushCursorSize();
+    showBrushCursor(e);
+  });
+
+  editorCanvas.addEventListener('mouseleave', function () {
+    hideBrushCursor();
   });
 
   // ---- Brush painting ----
@@ -416,7 +523,9 @@
   });
 
   editorCanvas.addEventListener('mousemove', function (e) {
-    if (!painting || !editorActive()) return;
+    if (!editorActive()) return;
+    showBrushCursor(e);
+    if (!painting) return;
     var pos = canvasPos(e);
     interpolateStroke(lastBrushX, lastBrushY, pos.x, pos.y);
     lastBrushX = pos.x;
@@ -466,38 +575,54 @@
   // ---- Mosaic brush: pixelate within a circle ----
   function applyMosaicBrush(canvas, bx, by, bw, bh, cx, cy, radius, blockSize) {
     var ctx = canvas.getContext('2d');
-    var imgData = ctx.getImageData(bx, by, bw, bh);
-    var d = imgData.data;
+    var source = strokeSource.width > 0 ? strokeSource : canvas;
     var r2 = radius * radius;
 
-    for (var py = 0; py < bh; py += blockSize) {
-      for (var px = 0; px < bw; px += blockSize) {
-        // Check if block center is inside circle
-        var midX = bx + px + blockSize / 2 - cx;
-        var midY = by + py + blockSize / 2 - cy;
+    // Align to global grid so overlapping dabs produce consistent blocks
+    var gx0 = Math.floor(bx / blockSize) * blockSize;
+    var gy0 = Math.floor(by / blockSize) * blockSize;
+    var gx1 = Math.ceil((bx + bw) / blockSize) * blockSize;
+    var gy1 = Math.ceil((by + bh) / blockSize) * blockSize;
+
+    // Clamp to canvas
+    gx0 = Math.max(0, gx0);
+    gy0 = Math.max(0, gy0);
+    gx1 = Math.min(canvas.width, gx1);
+    gy1 = Math.min(canvas.height, gy1);
+
+    // Read source pixels for color averaging (pre-stroke state)
+    var srcW = gx1 - gx0;
+    var srcH = gy1 - gy0;
+    if (srcW <= 0 || srcH <= 0) return;
+    var srcData = source.getContext('2d').getImageData(gx0, gy0, srcW, srcH).data;
+
+    for (var gy = gy0; gy < gy1; gy += blockSize) {
+      for (var gx = gx0; gx < gx1; gx += blockSize) {
+        // Check if block center is inside brush circle
+        var midX = gx + blockSize / 2 - cx;
+        var midY = gy + blockSize / 2 - cy;
         if (midX * midX + midY * midY > r2) continue;
 
+        var ebw = Math.min(blockSize, gx1 - gx);
+        var ebh = Math.min(blockSize, gy1 - gy);
+
+        // Average color from source (pre-stroke)
         var sr = 0, sg = 0, sb = 0, cnt = 0;
-        var ebw = Math.min(blockSize, bw - px);
-        var ebh = Math.min(blockSize, bh - py);
         for (var y2 = 0; y2 < ebh; y2++) {
           for (var x2 = 0; x2 < ebw; x2++) {
-            var i = ((py + y2) * bw + (px + x2)) * 4;
-            sr += d[i]; sg += d[i + 1]; sb += d[i + 2]; cnt++;
+            var i = ((gy - gy0 + y2) * srcW + (gx - gx0 + x2)) * 4;
+            sr += srcData[i]; sg += srcData[i + 1]; sb += srcData[i + 2]; cnt++;
           }
         }
         sr = Math.round(sr / cnt);
         sg = Math.round(sg / cnt);
         sb = Math.round(sb / cnt);
-        for (var y3 = 0; y3 < ebh; y3++) {
-          for (var x3 = 0; x3 < ebw; x3++) {
-            var j = ((py + y3) * bw + (px + x3)) * 4;
-            d[j] = sr; d[j + 1] = sg; d[j + 2] = sb;
-          }
-        }
+
+        // Fill block on live canvas
+        ctx.fillStyle = 'rgb(' + sr + ',' + sg + ',' + sb + ')';
+        ctx.fillRect(gx, gy, ebw, ebh);
       }
     }
-    ctx.putImageData(imgData, bx, by);
   }
 
   // ---- Gaussian blur brush using canvas filter ----
@@ -553,6 +678,13 @@
     startCropAndZip();
   });
 
+  function getDateStr() {
+    var now = new Date();
+    var m = String(now.getMonth() + 1).padStart(2, '0');
+    var d = String(now.getDate()).padStart(2, '0');
+    return m + '_' + d;
+  }
+
   function startCropAndZip() {
     resultList.innerHTML = '';
     downloadBtn.hidden = true;
@@ -562,29 +694,31 @@
 
     var zip = new JSZip();
     var total = imageData.length;
+    var dateStr = getDateStr();
+    var origFolder = zip.folder('original');
+    var postFolder = zip.folder('post_pixiv_' + dateStr);
 
     processSequential(imageData, function (data, idx) {
       step3ProgressFill.style.width = Math.round(((idx + 1) / total) * 100) + '%';
       step3ProgressText.textContent = 'クロップ中... (' + (idx + 1) + '/' + total + ')';
 
-      var num = String(idx + 1);
+      var num = String(idx + 1).padStart(2, '0');
 
-      // 1A: original
+      // A: original → 元画像フォルダ
       return canvasToBlob(data.origCanvas, 'image/jpeg', 0.95).then(function (origBlob) {
-        zip.file(num + 'A.jpg', origBlob);
+        origFolder.file(num + 'A.jpg', origBlob);
 
-        // 1B: mosaic version
-        return canvasToBlob(data.mosaicCanvas, 'image/jpeg', 0.95);
-      }).then(function (mosaicBlob) {
-        zip.file(num + 'B.jpg', mosaicBlob);
-
-        // 1C: cropped from mosaic version
+        // B: crop → 投稿用フォルダ
         var cropCanvas = createCropCanvas(data.mosaicCanvas, data.origCanvas.width, data.origCanvas.height, data.faceBox);
-
         return canvasToBlob(cropCanvas, 'image/jpeg', 0.92).then(function (cropBlob) {
-          zip.file(num + 'C.jpg', cropBlob);
+          postFolder.file(num + 'B.jpg', cropBlob);
 
-          addResultRow(num, cropCanvas, data.faceBox);
+          // C: mosaic → 投稿用フォルダ
+          return canvasToBlob(data.mosaicCanvas, 'image/jpeg', 0.95).then(function (mosaicBlob) {
+            postFolder.file(num + 'C.jpg', mosaicBlob);
+
+            addResultRow(num, cropCanvas);
+          });
         });
       });
     }).then(function () {
@@ -602,16 +736,29 @@
   }
 
   function createCropCanvas(mosaicCanvas, imgW, imgH, faceBox) {
-    var size = 1000;
-    var left, top;
+    var isLandscape = imgW > imgH;
+    var left, top, size;
 
     if (faceBox) {
       var faceCX = faceBox.x + faceBox.width / 2;
-      var eyeY = faceBox.y + faceBox.height * 0.3;
-      left = Math.round(faceCX - size / 2);
-      top = Math.round(eyeY);
+
+      if (isLandscape) {
+        // Landscape: crop below face, show more body context
+        var faceBottom = faceBox.y + faceBox.height;
+        size = Math.min(1000, Math.round(imgH * 0.7));
+        size = Math.max(size, 300);
+        top = Math.round(faceBottom);
+        left = Math.round(faceCX - size / 2);
+      } else {
+        // Portrait: crop from below eyes (nose level), 1000px
+        size = 1000;
+        var noseY = faceBox.y + faceBox.height * 0.65;
+        top = Math.round(noseY);
+        left = Math.round(faceCX - size / 2);
+      }
     } else {
-      // Center crop fallback
+      // No face: center crop
+      size = Math.min(1000, imgW, imgH);
       left = Math.round((imgW - size) / 2);
       top = Math.round((imgH - size) / 2);
     }
@@ -634,7 +781,7 @@
     return canvas;
   }
 
-  function addResultRow(num, cropCanvas, faceBox) {
+  function addResultRow(num, cropCanvas) {
     var row = document.createElement('div');
     row.className = 'result-row';
 
@@ -647,18 +794,11 @@
 
     var files = document.createElement('span');
     files.className = 'files';
-    files.textContent = num + 'A.jpg / ' + num + 'B.jpg / ' + num + 'C.jpg';
+    files.textContent = num + 'A / ' + num + 'B / ' + num + 'C';
 
     row.appendChild(img);
     row.appendChild(lbl);
     row.appendChild(files);
-
-    if (!faceBox) {
-      var warn = document.createElement('span');
-      warn.className = 'warn';
-      warn.textContent = '(顔未検出: 中央クロップ)';
-      row.appendChild(warn);
-    }
 
     resultList.appendChild(row);
   }
@@ -670,13 +810,9 @@
 
   function downloadZip() {
     if (!lastZipBlob) return;
-    var now = new Date();
-    var y = now.getFullYear();
-    var m = String(now.getMonth() + 1).padStart(2, '0');
-    var d = String(now.getDate()).padStart(2, '0');
     var a = document.createElement('a');
     a.href = URL.createObjectURL(lastZipBlob);
-    a.download = 'pixiv_upload_' + y + m + d + '.zip';
+    a.download = 'pixiv_' + getDateStr() + '.zip';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

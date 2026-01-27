@@ -3,20 +3,52 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pixiv投稿準備ツール</title>
+  <title>pixivoon</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Noto+Sans+JP:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=16">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=29">
 </head>
 <body>
-  <header>
-    <h1>Pixiv投稿準備ツール</h1>
-    <button id="theme-toggle" aria-label="テーマ切替">
-      <span class="icon-light">&#9788;</span>
-      <span class="icon-dark">&#9790;</span>
-    </button>
-  </header>
+  <div id="top-bar">
+    <header>
+      <h1>pixivoon <span class="version">v1.0</span></h1>
+      <label class="theme-switch">
+        <span class="theme-label">Night</span>
+        <input type="checkbox" id="theme-toggle" checked>
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        <span class="theme-label">Day</span>
+      </label>
+    </header>
+    <div id="editor-toolbar" hidden>
+      <span id="editor-title">編集中: 01 / 10</span>
+      <div class="toolbar-group">
+        <label class="toolbar-label">モード:
+          <select id="brush-mode">
+            <option value="mosaic">モザイク</option>
+            <option value="blur">ガウスぼかし</option>
+          </select>
+        </label>
+        <label class="toolbar-label">ブラシ:
+          <input type="range" id="brush-size" min="5" max="200" value="15">
+          <span id="brush-size-val">15</span>px
+        </label>
+        <label class="toolbar-label">強度:
+          <input type="range" id="effect-strength" min="3" max="50" value="8">
+          <span id="effect-strength-val">8</span>
+        </label>
+      </div>
+      <div class="toolbar-group">
+        <button id="editor-reset">リセット</button>
+        <button id="editor-undo">戻す</button>
+      </div>
+      <div class="toolbar-group toolbar-nav">
+        <button id="editor-prev">&larr; 戻る [A]</button>
+        <button id="editor-done">決定 &rarr; [S]</button>
+        <button id="editor-skip">送り &rarr; [D]</button>
+      </div>
+    </div>
+  </div>
 
   <main>
     <!-- ===== Step 1: Upload & Select ===== -->
@@ -63,41 +95,10 @@
 
       <div class="step-actions">
         <button id="back-to-step1">戻る</button>
-        <button id="skip-mosaic-btn" disabled>モザイク不要 → スキップ</button>
-        <button id="to-step3-btn" disabled>確定 → 次へ</button>
+        <button id="skip-mosaic-btn" disabled>モザイク不要 &rarr; スキップ</button>
+        <button id="to-step3-btn" disabled>確定 &rarr; 次へ</button>
       </div>
     </section>
-
-    <!-- ===== Mosaic Editor Overlay ===== -->
-    <div id="editor-overlay" hidden>
-      <div id="editor-toolbar">
-        <span id="editor-title">編集中: A</span>
-        <div class="toolbar-group">
-          <label class="toolbar-label">モード:
-            <select id="brush-mode">
-              <option value="mosaic">モザイク</option>
-              <option value="blur">ガウスぼかし</option>
-            </select>
-          </label>
-          <label class="toolbar-label">ブラシ:
-            <input type="range" id="brush-size" min="10" max="200" value="50">
-            <span id="brush-size-val">50</span>px
-          </label>
-          <label class="toolbar-label">強度:
-            <input type="range" id="effect-strength" min="3" max="50" value="15">
-            <span id="effect-strength-val">15</span>
-          </label>
-        </div>
-        <div class="toolbar-group">
-          <button id="editor-reset">リセット</button>
-          <button id="editor-undo">戻す</button>
-          <button id="editor-done">完了</button>
-        </div>
-      </div>
-      <div id="editor-body">
-        <canvas id="editor-canvas"></canvas>
-      </div>
-    </div>
 
     <!-- ===== Step 3: Complete ===== -->
     <section id="step-3" class="step" hidden>
@@ -119,8 +120,14 @@
     <p class="note privacy">※すべての処理はブラウザ内で完結します</p>
   </main>
 
+  <!-- Editor canvas area -->
+  <div id="editor-overlay" hidden>
+    <canvas id="editor-canvas"></canvas>
+    <div id="brush-cursor"></div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script src="script.js?v=16"></script>
+  <script src="script.js?v=29"></script>
 </body>
 </html>
