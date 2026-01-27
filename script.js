@@ -815,10 +815,10 @@
         top = Math.round(faceBottom);
         left = Math.round(faceCX - size / 2);
       } else {
-        // Portrait: crop from below eyes (nose level), 1000px
+        // Portrait: crop from jaw line (chin area), 1000px
         size = 1000;
-        var noseY = faceBox.y + faceBox.height * 0.65;
-        top = Math.round(noseY);
+        var chinY = faceBox.y + faceBox.height * 0.85;
+        top = Math.round(chinY);
         left = Math.round(faceCX - size / 2);
       }
     } else {
