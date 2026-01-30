@@ -115,7 +115,8 @@
     if (modelsLoaded) return Promise.resolve();
     return Promise.all([
       faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
-      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)
+      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+      faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL)
     ]).then(function () {
       modelsLoaded = true;
     });
@@ -286,29 +287,47 @@
       });
   }
 
+  // Multi-fallback face detection
+  function detectFace(canvas) {
+    // 1. SSD MobileNet + landmarks (precise mouth position)
+    var ssdOpts = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 });
+    return faceapi.detectSingleFace(canvas, ssdOpts)
+      .withFaceLandmarks()
+      .then(function (result) {
+        if (result) {
+          var cropY = result.landmarks.positions[57].y;
+          var faceCX = result.detection.box.x + result.detection.box.width / 2;
+          return { cropY: cropY, faceCX: faceCX };
+        }
+        // 2. SSD MobileNet without landmarks (box only, estimate mouth at 75%)
+        return faceapi.detectSingleFace(canvas, ssdOpts).then(function (det) {
+          if (det) {
+            var box = det.box;
+            return { cropY: box.y + box.height * 0.75, faceCX: box.x + box.width / 2 };
+          }
+          // 3. TinyFaceDetector (different algorithm, low threshold)
+          var tinyOpts = new faceapi.TinyFaceDetectorOptions({ inputSize: 512, scoreThreshold: 0.15 });
+          return faceapi.detectSingleFace(canvas, tinyOpts).then(function (det2) {
+            if (det2) {
+              var box = det2.box;
+              return { cropY: box.y + box.height * 0.75, faceCX: box.x + box.width / 2 };
+            }
+            return null;
+          });
+        });
+      });
+  }
+
   function prepareImage(file, idx) {
     return loadImageAsCanvas(file).then(function (canvas) {
       var mosaicCanvas = cloneCanvas(canvas);
 
-      // Detect face with SSD MobileNet + 68-point landmarks
-      return faceapi.detectSingleFace(canvas)
-        .withFaceLandmarks()
-        .then(function (result) {
-          var cropY = null;
-          var faceCX = null;
-
-          if (result) {
-            // Point 57 = lower lip bottom center
-            cropY = result.landmarks.positions[57].y;
-            var box = result.detection.box;
-            faceCX = box.x + box.width / 2;
-          }
-
+      return detectFace(canvas).then(function (face) {
           imageData[idx] = {
             origCanvas: canvas,
             mosaicCanvas: mosaicCanvas,
-            cropY: cropY,
-            faceCX: faceCX,
+            cropY: face ? face.cropY : null,
+            faceCX: face ? face.faceCX : null,
             undoStack: []
           };
         });
