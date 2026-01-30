@@ -842,15 +842,13 @@
       top = Math.round((imgH - size) / 2);
     }
 
-    // Clamp
+    // Clamp: never move top above face landmark — shrink size instead
     if (left < 0) left = 0;
     if (top < 0) top = 0;
     if (left + size > imgW) left = Math.max(0, imgW - size);
-    if (top + size > imgH) top = Math.max(0, imgH - size);
+    if (top + size > imgH) size = imgH - top;
 
-    var actualW = Math.min(size, imgW - left);
-    var actualH = Math.min(size, imgH - top);
-    var actualSize = Math.min(actualW, actualH);
+    var actualSize = Math.min(size, imgW - left, imgH - top);
 
     var canvas = document.createElement('canvas');
     canvas.width = actualSize;
