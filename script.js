@@ -113,7 +113,10 @@
   // ============================================================
   function loadModels() {
     if (modelsLoaded) return Promise.resolve();
-    return faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL).then(function () {
+    return Promise.all([
+      faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)
+    ]).then(function () {
       modelsLoaded = true;
     });
   }
@@ -287,16 +290,29 @@
     return loadImageAsCanvas(file).then(function (canvas) {
       var mosaicCanvas = cloneCanvas(canvas);
 
-      // Detect face (used for cropping in Step 3)
-      var options = new faceapi.TinyFaceDetectorOptions({ inputSize: 512, scoreThreshold: 0.15 });
-      return faceapi.detectSingleFace(canvas, options).then(function (det) {
-        imageData[idx] = {
-          origCanvas: canvas,
-          mosaicCanvas: mosaicCanvas,
-          faceBox: det ? det.box : null,
-          undoStack: []
-        };
-      });
+      // Detect face with SSD MobileNet + 68-point landmarks
+      return faceapi.detectSingleFace(canvas)
+        .withFaceLandmarks()
+        .then(function (result) {
+          var chinY = null;
+          var faceCX = null;
+
+          if (result) {
+            // Jaw outline: points 0-16, point 8 = chin bottom
+            var jaw = result.landmarks.getJawOutline();
+            chinY = jaw[8].y;
+            var box = result.detection.box;
+            faceCX = box.x + box.width / 2;
+          }
+
+          imageData[idx] = {
+            origCanvas: canvas,
+            mosaicCanvas: mosaicCanvas,
+            chinY: chinY,
+            faceCX: faceCX,
+            undoStack: []
+          };
+        });
     });
   }
 
@@ -771,7 +787,7 @@
         origFolder.file(num + 'A.jpg', origBlob);
 
         // B: crop → 投稿用フォルダ
-        var cropCanvas = createCropCanvas(data.mosaicCanvas, data.origCanvas.width, data.origCanvas.height, data.faceBox);
+        var cropCanvas = createCropCanvas(data);
         return canvasToBlob(cropCanvas, 'image/jpeg', 0.92).then(function (cropBlob) {
           postFolder.file(num + 'B.jpg', cropBlob);
 
@@ -800,29 +816,28 @@
     });
   }
 
-  function createCropCanvas(mosaicCanvas, imgW, imgH, faceBox) {
+  function createCropCanvas(data) {
+    var mosaicCanvas = data.mosaicCanvas;
+    var imgW = data.origCanvas.width;
+    var imgH = data.origCanvas.height;
     var isLandscape = imgW > imgH;
     var left, top, size;
 
-    if (faceBox) {
-      var faceCX = faceBox.x + faceBox.width / 2;
+    if (data.chinY != null && data.faceCX != null) {
+      // Use actual chin position from 68-point landmarks
+      var chinY = data.chinY;
+      var faceCX = data.faceCX;
 
       if (isLandscape) {
-        // Landscape: crop below face, show more body context
-        var faceBottom = faceBox.y + faceBox.height;
         size = Math.min(1000, Math.round(imgH * 0.7));
         size = Math.max(size, 300);
-        top = Math.round(faceBottom);
-        left = Math.round(faceCX - size / 2);
       } else {
-        // Portrait: tight crop from jaw line (chin area)
         size = Math.min(800, imgW);
-        var chinY = faceBox.y + faceBox.height * 0.85;
-        top = Math.round(chinY);
-        left = Math.round(faceCX - size / 2);
       }
+      top = Math.round(chinY);
+      left = Math.round(faceCX - size / 2);
     } else {
-      // No face: center crop
+      // No face detected: center crop
       size = Math.min(1000, imgW, imgH);
       left = Math.round((imgW - size) / 2);
       top = Math.round((imgH - size) / 2);
