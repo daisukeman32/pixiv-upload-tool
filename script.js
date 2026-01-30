@@ -289,28 +289,40 @@
 
   // Multi-fallback face detection
   function detectFace(canvas) {
-    // 1. SSD MobileNet + landmarks (precise mouth position)
+    // 1. SSD MobileNet + landmarks (precise mouth + nose position)
     var ssdOpts = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 });
     return faceapi.detectSingleFace(canvas, ssdOpts)
       .withFaceLandmarks()
       .then(function (result) {
         if (result) {
-          var cropY = result.landmarks.positions[57].y;
-          var faceCX = result.detection.box.x + result.detection.box.width / 2;
-          return { cropY: cropY, faceCX: faceCX };
+          var pos = result.landmarks.positions;
+          var box = result.detection.box;
+          return {
+            cropY: pos[57].y,        // lower lip bottom
+            noseY: pos[33].y,        // nose tip (upper limit for expansion)
+            faceCX: box.x + box.width / 2
+          };
         }
-        // 2. SSD MobileNet without landmarks (box only, estimate mouth at 75%)
+        // 2. SSD MobileNet without landmarks (box only, estimate positions)
         return faceapi.detectSingleFace(canvas, ssdOpts).then(function (det) {
           if (det) {
             var box = det.box;
-            return { cropY: box.y + box.height * 0.75, faceCX: box.x + box.width / 2 };
+            return {
+              cropY: box.y + box.height * 0.75,
+              noseY: box.y + box.height * 0.55,
+              faceCX: box.x + box.width / 2
+            };
           }
           // 3. TinyFaceDetector (different algorithm, low threshold)
           var tinyOpts = new faceapi.TinyFaceDetectorOptions({ inputSize: 512, scoreThreshold: 0.15 });
           return faceapi.detectSingleFace(canvas, tinyOpts).then(function (det2) {
             if (det2) {
               var box = det2.box;
-              return { cropY: box.y + box.height * 0.75, faceCX: box.x + box.width / 2 };
+              return {
+                cropY: box.y + box.height * 0.75,
+                noseY: box.y + box.height * 0.55,
+                faceCX: box.x + box.width / 2
+              };
             }
             return null;
           });
@@ -327,6 +339,7 @@
             origCanvas: canvas,
             mosaicCanvas: mosaicCanvas,
             cropY: face ? face.cropY : null,
+            noseY: face ? face.noseY : null,
             faceCX: face ? face.faceCX : null,
             undoStack: []
           };
@@ -841,19 +854,31 @@
     var isLandscape = imgW > imgH;
     var left, top, size;
 
+    var MIN_CROP = 300;
+
     if (data.cropY != null && data.faceCX != null) {
       // Use lower lip position from 68-point landmarks (point 57)
       var cropY = data.cropY;
+      var noseY = data.noseY || cropY; // upper limit for expansion
       var faceCX = data.faceCX;
 
       if (isLandscape) {
         size = Math.min(1000, Math.round(imgH * 0.7));
-        size = Math.max(size, 300);
+        size = Math.max(size, MIN_CROP);
       } else {
         size = Math.min(800, imgW);
+        size = Math.max(size, MIN_CROP);
       }
       top = Math.round(cropY);
       left = Math.round(faceCX - size / 2);
+
+      // If not enough space below, expand upward but never above nose
+      var available = imgH - top;
+      if (available < MIN_CROP) {
+        var noseLimit = Math.round(noseY);
+        top = Math.max(noseLimit, imgH - size);
+        top = Math.max(0, top);
+      }
     } else {
       // No face detected: center crop
       size = Math.min(1000, imgW, imgH);
@@ -861,13 +886,14 @@
       top = Math.round((imgH - size) / 2);
     }
 
-    // Clamp: never move top above face landmark — shrink size instead
+    // Clamp
     if (left < 0) left = 0;
     if (top < 0) top = 0;
     if (left + size > imgW) left = Math.max(0, imgW - size);
     if (top + size > imgH) size = imgH - top;
 
     var actualSize = Math.min(size, imgW - left, imgH - top);
+    actualSize = Math.max(actualSize, 1);
 
     var canvas = document.createElement('canvas');
     canvas.width = actualSize;
