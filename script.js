@@ -294,13 +294,12 @@
       return faceapi.detectSingleFace(canvas)
         .withFaceLandmarks()
         .then(function (result) {
-          var chinY = null;
+          var cropY = null;
           var faceCX = null;
 
           if (result) {
-            // Jaw outline: points 0-16, point 8 = chin bottom
-            var jaw = result.landmarks.getJawOutline();
-            chinY = jaw[8].y;
+            // Point 57 = lower lip bottom center
+            cropY = result.landmarks.positions[57].y;
             var box = result.detection.box;
             faceCX = box.x + box.width / 2;
           }
@@ -308,7 +307,7 @@
           imageData[idx] = {
             origCanvas: canvas,
             mosaicCanvas: mosaicCanvas,
-            chinY: chinY,
+            cropY: cropY,
             faceCX: faceCX,
             undoStack: []
           };
@@ -823,9 +822,9 @@
     var isLandscape = imgW > imgH;
     var left, top, size;
 
-    if (data.chinY != null && data.faceCX != null) {
-      // Use actual chin position from 68-point landmarks
-      var chinY = data.chinY;
+    if (data.cropY != null && data.faceCX != null) {
+      // Use lower lip position from 68-point landmarks (point 57)
+      var cropY = data.cropY;
       var faceCX = data.faceCX;
 
       if (isLandscape) {
@@ -834,7 +833,7 @@
       } else {
         size = Math.min(800, imgW);
       }
-      top = Math.round(chinY);
+      top = Math.round(cropY);
       left = Math.round(faceCX - size / 2);
     } else {
       // No face detected: center crop
