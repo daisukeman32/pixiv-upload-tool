@@ -7,12 +7,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=30">
+  <link rel="stylesheet" href="style.css?v=31">
 </head>
 <body>
   <div id="top-bar">
     <header>
-      <h1>pixivoon <span class="version">v1.8</span></h1>
+      <h1>pixivoon <span class="version">v2.0</span></h1>
       <label class="theme-switch">
         <span class="theme-label">Night</span>
         <input type="checkbox" id="theme-toggle" checked>
@@ -41,11 +41,12 @@
       <div class="toolbar-group">
         <button id="editor-reset">リセット</button>
         <button id="editor-undo">戻す</button>
+        <button id="editor-delete" class="btn-delete">削除 [W]</button>
       </div>
       <div class="toolbar-group toolbar-nav">
         <button id="editor-prev">&larr; 戻る [A]</button>
-        <button id="editor-done">決定 &rarr; [S]</button>
-        <button id="editor-skip">送り &rarr; [D]</button>
+        <button id="editor-done">決定 → [S]</button>
+        <button id="editor-skip">送り → [D]</button>
       </div>
     </div>
   </div>
@@ -71,13 +72,20 @@
       <div id="all-thumbnails"></div>
 
       <div class="step-actions">
-        <label class="select-count-label">選択枚数:
-          <input type="number" id="select-count" min="1" max="26" value="10">
+        <label class="select-count-label">1日の枚数:
+          <input type="number" id="per-day-count" min="1" max="99" value="5">
+        </label>
+        <label class="select-count-label">分割日数:
+          <input type="number" id="split-days" min="1" max="99" value="1">
+        </label>
+        <span class="auto-total">= <span id="auto-total">5</span>枚</span>
+        <label class="select-count-label">出力日付:
+          <input type="date" id="output-date">
         </label>
         <button id="random-select-btn" disabled>ランダム選択</button>
         <button id="clear-all-btn" hidden>すべてクリア</button>
         <button id="clear-history-btn" hidden>履歴クリア</button>
-        <p id="selected-count">選択中: 0/10枚</p>
+        <p id="selected-count">選択中: 0/5枚</p>
         <button id="to-step2-btn" disabled>次へ: モザイク処理</button>
       </div>
     </section>
@@ -101,13 +109,26 @@
       </div>
     </section>
 
-    <!-- ===== Step 3: Complete ===== -->
+    <!-- ===== Step 3: Split Preview ===== -->
     <section id="step-3" class="step" hidden>
-      <h2>3. 処理完了</h2>
+      <h2>3. 日付分割</h2>
+      <p class="step-desc">画像をドラッグして別の日に移動できます。</p>
 
-      <div id="step3-progress" hidden>
-        <div class="progress-bar"><div id="step3-progress-fill"></div></div>
-        <p id="step3-progress-text">クロップ中...</p>
+      <div id="split-preview"></div>
+
+      <div class="step-actions">
+        <button id="back-to-step2">戻る</button>
+        <button id="to-step4-btn">確定 &rarr; ZIP生成</button>
+      </div>
+    </section>
+
+    <!-- ===== Step 4: Complete ===== -->
+    <section id="step-4" class="step" hidden>
+      <h2>4. 処理完了</h2>
+
+      <div id="step4-progress" hidden>
+        <div class="progress-bar"><div id="step4-progress-fill"></div></div>
+        <p id="step4-progress-text">クロップ中...</p>
       </div>
 
       <div id="result-list"></div>
@@ -129,6 +150,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script src="script.js?v=37"></script>
+  <script src="script.js?v=38"></script>
 </body>
 </html>

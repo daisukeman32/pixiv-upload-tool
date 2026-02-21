@@ -2,7 +2,6 @@
   'use strict';
 
   var MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
-  var LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   var STORAGE_KEY = 'pixivoon_used_files';
 
   // ============================================================
@@ -31,10 +30,11 @@
   // State
   // ============================================================
   var allFiles = [];           // all loaded files
-  var selectedIndices = [];    // indices into allFiles (up to 10)
-  var imageData = [];          // { origCanvas, mosaicCanvas, faceBox, undoStack } per selected image
+  var selectedIndices = [];    // indices into allFiles
+  var imageData = [];          // { origCanvas, mosaicCanvas, fileIndex, ... } per selected image
   var modelsLoaded = false;
   var lastZipBlob = null;
+  var dayGroups = [];          // [{ date: Date, indices: [imageData indices] }, ...]
 
   // ============================================================
   // DOM refs
@@ -43,7 +43,10 @@
   var fileInput = document.getElementById('file-input');
   var loadedCount = document.getElementById('loaded-count');
   var allThumbnails = document.getElementById('all-thumbnails');
-  var selectCountInput = document.getElementById('select-count');
+  var perDayCountInput = document.getElementById('per-day-count');
+  var splitDaysInput = document.getElementById('split-days');
+  var autoTotalSpan = document.getElementById('auto-total');
+  var outputDateInput = document.getElementById('output-date');
   var randomSelectBtn = document.getElementById('random-select-btn');
   var clearAllBtn = document.getElementById('clear-all-btn');
   var selectedCount = document.getElementById('selected-count');
@@ -57,11 +60,16 @@
   var skipMosaicBtn = document.getElementById('skip-mosaic-btn');
   var toStep3Btn = document.getElementById('to-step3-btn');
 
+  var splitPreview = document.getElementById('split-preview');
+  var backToStep2 = document.getElementById('back-to-step2');
+  var toStep4Btn = document.getElementById('to-step4-btn');
+
   var editorOverlay = document.getElementById('editor-overlay');
   var editorTitle = document.getElementById('editor-title');
   var editorCanvas = document.getElementById('editor-canvas');
   var editorReset = document.getElementById('editor-reset');
   var editorUndo = document.getElementById('editor-undo');
+  var editorDeleteBtn = document.getElementById('editor-delete');
   var editorDone = document.getElementById('editor-done');
   var editorPrev = document.getElementById('editor-prev');
   var editorSkip = document.getElementById('editor-skip');
@@ -72,9 +80,9 @@
   var effectStrengthInput = document.getElementById('effect-strength');
   var effectStrengthVal = document.getElementById('effect-strength-val');
 
-  var step3Progress = document.getElementById('step3-progress');
-  var step3ProgressFill = document.getElementById('step3-progress-fill');
-  var step3ProgressText = document.getElementById('step3-progress-text');
+  var step4Progress = document.getElementById('step4-progress');
+  var step4ProgressFill = document.getElementById('step4-progress-fill');
+  var step4ProgressText = document.getElementById('step4-progress-text');
   var resultList = document.getElementById('result-list');
   var downloadBtn = document.getElementById('download-btn');
   var restartBtn = document.getElementById('restart-btn');
@@ -99,6 +107,17 @@
     document.body.classList.add('dark');
     themeToggle.checked = false;
   }
+
+  // ============================================================
+  // Output date (default: today)
+  // ============================================================
+  (function initDate() {
+    var now = new Date();
+    var y = now.getFullYear();
+    var m = String(now.getMonth() + 1).padStart(2, '0');
+    var d = String(now.getDate()).padStart(2, '0');
+    outputDateInput.value = y + '-' + m + '-' + d;
+  })();
 
   // ============================================================
   // Step navigation
@@ -158,10 +177,42 @@
     renderStep1();
   });
 
-  function getMaxCount() {
-    var v = parseInt(selectCountInput.value, 10);
-    return (v > 0 && v <= 26) ? v : 10;
+  function getPerDayCount() {
+    var v = parseInt(perDayCountInput.value, 10);
+    return (v > 0 && v <= 99) ? v : 5;
   }
+
+  function getSplitDays() {
+    var v = parseInt(splitDaysInput.value, 10);
+    return (v > 0 && v <= 99) ? v : 1;
+  }
+
+  function getMaxCount() {
+    return getPerDayCount() * getSplitDays();
+  }
+
+  function updateAutoTotal() {
+    var total = getMaxCount();
+    autoTotalSpan.textContent = total;
+  }
+
+  perDayCountInput.addEventListener('change', function () {
+    updateAutoTotal();
+    var max = getMaxCount();
+    if (selectedIndices.length > max) {
+      selectedIndices = selectedIndices.slice(0, max);
+    }
+    renderStep1();
+  });
+
+  splitDaysInput.addEventListener('change', function () {
+    updateAutoTotal();
+    var max = getMaxCount();
+    if (selectedIndices.length > max) {
+      selectedIndices = selectedIndices.slice(0, max);
+    }
+    renderStep1();
+  });
 
   randomSelectBtn.addEventListener('click', function () {
     var max = getMaxCount();
@@ -238,13 +289,6 @@
     clearHistoryBtn.hidden = usedFiles.size === 0;
   }
 
-  selectCountInput.addEventListener('change', function () {
-    var max = getMaxCount();
-    if (selectedIndices.length > max) {
-      selectedIndices = selectedIndices.slice(0, max);
-    }
-    renderStep1();
-  });
 
   // ============================================================
   // Step 1 → Step 2
@@ -338,6 +382,7 @@
           imageData[idx] = {
             origCanvas: canvas,
             mosaicCanvas: mosaicCanvas,
+            fileIndex: selectedIndices[idx], // track which allFiles entry this is
             cropY: face ? face.cropY : null,
             noseY: face ? face.noseY : null,
             faceCX: face ? face.faceCX : null,
@@ -345,6 +390,25 @@
           };
         });
     });
+  }
+
+  // ============================================================
+  // Image deletion (Step 2)
+  // ============================================================
+  function deleteImage(idx) {
+    // Mark as used in history
+    var data = imageData[idx];
+    if (data && data.fileIndex != null) {
+      var file = allFiles[data.fileIndex];
+      if (file) addUsedFiles([file.name]);
+    }
+
+    // Remove from imageData
+    imageData.splice(idx, 1);
+
+    // Update button states
+    toStep3Btn.disabled = imageData.length === 0;
+    skipMosaicBtn.disabled = imageData.length === 0;
   }
 
   function renderMosaicGrid() {
@@ -384,8 +448,18 @@
         openEditor(idx);
       });
 
+      var delBtn = document.createElement('button');
+      delBtn.className = 'card-delete';
+      delBtn.textContent = '削除';
+      delBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        deleteImage(idx);
+        renderMosaicGrid();
+      });
+
       actions.appendChild(resetBtn);
       actions.appendChild(editBtn);
+      actions.appendChild(delBtn);
 
       card.appendChild(img);
       card.appendChild(label);
@@ -475,9 +549,28 @@
     editorCloseAndOpen(prev);
   }
 
+  // Delete current image in editor
+  function editorDeleteCurrent() {
+    if (!editorActive()) return;
+    var next = editorIdx; // after splice, same index points to next image
+    deleteImage(editorIdx);
+    editorIdx = -1;
+    painting = false;
+    hideBrushCursor();
+    editorOverlay.hidden = true;
+    editorToolbar.hidden = true;
+    renderMosaicGrid();
+    // Open next image (or previous if was last)
+    if (imageData.length > 0) {
+      var openIdx = Math.min(next, imageData.length - 1);
+      openEditor(openIdx);
+    }
+  }
+
   editorDone.addEventListener('click', editorConfirmNext);
   editorPrev.addEventListener('click', editorGoBack);
   editorSkip.addEventListener('click', editorSkipNext);
+  editorDeleteBtn.addEventListener('click', editorDeleteCurrent);
 
   // Keyboard shortcuts (only when editor is open)
   document.addEventListener('keydown', function (e) {
@@ -487,7 +580,7 @@
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
 
     switch (e.key) {
-      case 's': case 'S': case 'ArrowUp':
+      case 's': case 'S':
         e.preventDefault();
         editorConfirmNext();
         break;
@@ -498,6 +591,11 @@
       case 'a': case 'A': case 'ArrowLeft':
         e.preventDefault();
         editorGoBack();
+        break;
+      case 'w': case 'W': case 'ArrowUp':
+      case 'Delete': case 'Backspace':
+        e.preventDefault();
+        editorDeleteCurrent();
         break;
     }
   });
@@ -765,7 +863,7 @@
   }
 
   // ============================================================
-  // Step 2 → Step 3
+  // Step 2 → Step 3 / Step 4
   // ============================================================
   backToStep1.addEventListener('click', function () {
     showStep('step-1');
@@ -777,17 +875,170 @@
       var ctx = data.mosaicCanvas.getContext('2d');
       ctx.drawImage(data.origCanvas, 0, 0);
     });
-    showStep('step-3');
-    startCropAndZip();
+    proceedAfterMosaic();
   });
 
   // Confirm current state (with any edits) and proceed
   toStep3Btn.addEventListener('click', function () {
-    showStep('step-3');
+    proceedAfterMosaic();
+  });
+
+  function proceedAfterMosaic() {
+    var splitDays = getSplitDays();
+    if (splitDays > 1) {
+      buildDayGroups(splitDays);
+      renderSplitPreview();
+      showStep('step-3');
+    } else {
+      // Single day: build one group with all images, go directly to step 4
+      dayGroups = [{ date: getStartDate(), indices: imageData.map(function (_, i) { return i; }) }];
+      showStep('step-4');
+      startCropAndZip();
+    }
+  }
+
+  // ============================================================
+  // Step 3: Split Preview
+  // ============================================================
+  backToStep2.addEventListener('click', function () {
+    showStep('step-2');
+  });
+
+  toStep4Btn.addEventListener('click', function () {
+    showStep('step-4');
     startCropAndZip();
   });
 
+  function getStartDate() {
+    var val = outputDateInput.value;
+    if (val) {
+      var parts = val.split('-');
+      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    }
+    return new Date();
+  }
+
+  function formatDateStr(date) {
+    var m = String(date.getMonth() + 1).padStart(2, '0');
+    var d = String(date.getDate()).padStart(2, '0');
+    return m + '_' + d;
+  }
+
+  function addDays(date, n) {
+    var d = new Date(date);
+    d.setDate(d.getDate() + n);
+    return d;
+  }
+
+  function buildDayGroups(splitDays) {
+    var total = imageData.length;
+    var perDay = Math.floor(total / splitDays);
+    var remainder = total % splitDays;
+    var startDate = getStartDate();
+
+    // Shuffle indices
+    var indices = [];
+    for (var i = 0; i < total; i++) indices.push(i);
+    for (var j = indices.length - 1; j > 0; j--) {
+      var k = Math.floor(Math.random() * (j + 1));
+      var tmp = indices[j]; indices[j] = indices[k]; indices[k] = tmp;
+    }
+
+    dayGroups = [];
+    var offset = 0;
+    for (var day = 0; day < splitDays; day++) {
+      var count = perDay + (day < remainder ? 1 : 0);
+      dayGroups.push({
+        date: addDays(startDate, day),
+        indices: indices.slice(offset, offset + count)
+      });
+      offset += count;
+    }
+  }
+
+  // Drag & drop state
+  var dragSourceGroup = -1;
+  var dragSourceIdx = -1;
+
+  function renderSplitPreview() {
+    splitPreview.innerHTML = '';
+
+    dayGroups.forEach(function (group, groupIdx) {
+      var container = document.createElement('div');
+      container.className = 'day-group';
+      container.dataset.group = groupIdx;
+
+      var header = document.createElement('div');
+      header.className = 'day-group-header';
+      var dateStr = formatDateStr(group.date);
+      header.innerHTML = dateStr.replace('_', '/') +
+        ' <span class="day-count">(' + group.indices.length + '枚)</span>';
+
+      var thumbs = document.createElement('div');
+      thumbs.className = 'day-group-thumbs';
+
+      group.indices.forEach(function (imgIdx, posInGroup) {
+        var data = imageData[imgIdx];
+        var img = document.createElement('img');
+        img.src = data.mosaicCanvas.toDataURL('image/jpeg', 0.5);
+        img.draggable = true;
+        img.dataset.group = groupIdx;
+        img.dataset.pos = posInGroup;
+
+        img.addEventListener('dragstart', function (e) {
+          dragSourceGroup = groupIdx;
+          dragSourceIdx = posInGroup;
+          img.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+        });
+
+        img.addEventListener('dragend', function () {
+          img.classList.remove('dragging');
+          dragSourceGroup = -1;
+          dragSourceIdx = -1;
+        });
+
+        thumbs.appendChild(img);
+      });
+
+      // Drop zone events on the group container
+      container.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        container.classList.add('drag-over');
+      });
+
+      container.addEventListener('dragleave', function () {
+        container.classList.remove('drag-over');
+      });
+
+      container.addEventListener('drop', function (e) {
+        e.preventDefault();
+        container.classList.remove('drag-over');
+        if (dragSourceGroup < 0 || dragSourceGroup === groupIdx) return;
+
+        // Move image from source group to this group
+        var movedImgIdx = dayGroups[dragSourceGroup].indices.splice(dragSourceIdx, 1)[0];
+        dayGroups[groupIdx].indices.push(movedImgIdx);
+
+        renderSplitPreview();
+      });
+
+      container.appendChild(header);
+      container.appendChild(thumbs);
+      splitPreview.appendChild(container);
+    });
+  }
+
+  // ============================================================
+  // Step 4: Crop & ZIP
+  // ============================================================
   function getDateStr() {
+    var val = outputDateInput.value; // 'YYYY-MM-DD'
+    if (val) {
+      var parts = val.split('-');
+      return parts[1] + '_' + parts[2];
+    }
     var now = new Date();
     var m = String(now.getMonth() + 1).padStart(2, '0');
     var d = String(now.getDate()).padStart(2, '0');
@@ -797,53 +1048,80 @@
   function startCropAndZip() {
     resultList.innerHTML = '';
     downloadBtn.hidden = true;
-    step3Progress.hidden = false;
-    step3ProgressFill.style.width = '0%';
-    step3ProgressText.textContent = 'クロップ＆ZIP生成中...';
+    step4Progress.hidden = false;
+    step4ProgressFill.style.width = '0%';
+    step4ProgressText.textContent = 'クロップ＆ZIP生成中...';
 
     var zip = new JSZip();
-    var total = imageData.length;
-    var dateStr = getDateStr();
-    var origFolder = zip.folder('original');
-    var postFolder = zip.folder('post_pixiv_' + dateStr);
+    var isSingleDay = dayGroups.length === 1;
 
-    processSequential(imageData, function (data, idx) {
-      step3ProgressFill.style.width = Math.round(((idx + 1) / total) * 100) + '%';
-      step3ProgressText.textContent = 'クロップ中... (' + (idx + 1) + '/' + total + ')';
+    // Flatten all images for progress tracking
+    var allTasks = [];
+    dayGroups.forEach(function (group, groupIdx) {
+      group.indices.forEach(function (imgIdx, posInGroup) {
+        allTasks.push({ groupIdx: groupIdx, imgIdx: imgIdx, posInGroup: posInGroup });
+      });
+    });
 
-      var num = String(idx + 1).padStart(2, '0');
+    var totalTasks = allTasks.length;
 
-      // A: original → 元画像フォルダ
+    processSequential(allTasks, function (task, taskIdx) {
+      step4ProgressFill.style.width = Math.round(((taskIdx + 1) / totalTasks) * 100) + '%';
+      step4ProgressText.textContent = 'クロップ中... (' + (taskIdx + 1) + '/' + totalTasks + ')';
+
+      var group = dayGroups[task.groupIdx];
+      var data = imageData[task.imgIdx];
+      var dateStr = formatDateStr(group.date);
+      var num = String(task.posInGroup + 1).padStart(2, '0');
+
+      // Determine folder paths
+      var origFolder, postFolder;
+      if (isSingleDay) {
+        origFolder = zip.folder('original');
+        postFolder = zip.folder('post_pixiv_' + dateStr);
+      } else {
+        var dayFolder = zip.folder(dateStr);
+        origFolder = dayFolder.folder('original');
+        postFolder = dayFolder.folder('post_pixiv_' + dateStr);
+      }
+
+      // A: original
       return canvasToBlob(data.origCanvas, 'image/jpeg', 0.95).then(function (origBlob) {
         origFolder.file(num + 'A.jpg', origBlob);
 
-        // B: crop → 投稿用フォルダ
+        // B: crop
         var cropCanvas = createCropCanvas(data);
         return canvasToBlob(cropCanvas, 'image/jpeg', 0.92).then(function (cropBlob) {
           postFolder.file(num + 'B.jpg', cropBlob);
 
-          // C: mosaic → 投稿用フォルダ
+          // C: mosaic
           return canvasToBlob(data.mosaicCanvas, 'image/jpeg', 0.95).then(function (mosaicBlob) {
             postFolder.file(num + 'C.jpg', mosaicBlob);
 
-            addResultRow(num, cropCanvas);
+            addResultRow(num, cropCanvas, isSingleDay ? '' : dateStr);
           });
         });
       });
     }).then(function () {
-      step3ProgressText.textContent = 'ZIPを生成中...';
+      step4ProgressText.textContent = 'ZIPを生成中...';
       return zip.generateAsync({ type: 'blob' });
     }).then(function (zipBlob) {
       lastZipBlob = zipBlob;
-      step3Progress.hidden = true;
+      step4Progress.hidden = true;
       downloadBtn.hidden = false;
       // Save used filenames to history
-      var usedFilenames = selectedIndices.map(function (i) { return allFiles[i].name; });
+      var usedFilenames = [];
+      imageData.forEach(function (data) {
+        if (data.fileIndex != null) {
+          var file = allFiles[data.fileIndex];
+          if (file) usedFilenames.push(file.name);
+        }
+      });
       addUsedFiles(usedFilenames);
       downloadZip();
     }).catch(function (err) {
       console.error(err);
-      step3ProgressText.textContent = 'エラー: ' + err.message;
+      step4ProgressText.textContent = 'エラー: ' + err.message;
     });
   }
 
@@ -903,7 +1181,7 @@
     return canvas;
   }
 
-  function addResultRow(num, cropCanvas) {
+  function addResultRow(num, cropCanvas, dateLabel) {
     var row = document.createElement('div');
     row.className = 'result-row';
 
@@ -912,7 +1190,7 @@
 
     var lbl = document.createElement('span');
     lbl.className = 'label';
-    lbl.textContent = num;
+    lbl.textContent = (dateLabel ? dateLabel.replace('_', '/') + ' ' : '') + num;
 
     var files = document.createElement('span');
     files.className = 'files';
@@ -945,6 +1223,7 @@
     allFiles = [];
     selectedIndices = [];
     imageData = [];
+    dayGroups = [];
     lastZipBlob = null;
     renderStep1();
     showStep('step-1');
@@ -988,50 +1267,6 @@
     return new Promise(function (resolve) {
       canvas.toBlob(resolve, type, quality);
     });
-  }
-
-  function applyMosaic(canvas, x, y, w, h, blockSize) {
-    var ctx = canvas.getContext('2d');
-    // Clamp to canvas bounds
-    x = Math.max(0, Math.round(x));
-    y = Math.max(0, Math.round(y));
-    w = Math.min(Math.round(w), canvas.width - x);
-    h = Math.min(Math.round(h), canvas.height - y);
-    if (w <= 0 || h <= 0) return;
-
-    var imgData = ctx.getImageData(x, y, w, h);
-    var d = imgData.data;
-
-    for (var py = 0; py < h; py += blockSize) {
-      for (var px = 0; px < w; px += blockSize) {
-        // Average color in block
-        var r = 0, g = 0, b = 0, count = 0;
-        var bh = Math.min(blockSize, h - py);
-        var bw = Math.min(blockSize, w - px);
-        for (var by = 0; by < bh; by++) {
-          for (var bx = 0; bx < bw; bx++) {
-            var i = ((py + by) * w + (px + bx)) * 4;
-            r += d[i];
-            g += d[i + 1];
-            b += d[i + 2];
-            count++;
-          }
-        }
-        r = Math.round(r / count);
-        g = Math.round(g / count);
-        b = Math.round(b / count);
-        // Fill block
-        for (var by2 = 0; by2 < bh; by2++) {
-          for (var bx2 = 0; bx2 < bw; bx2++) {
-            var j = ((py + by2) * w + (px + bx2)) * 4;
-            d[j] = r;
-            d[j + 1] = g;
-            d[j + 2] = b;
-          }
-        }
-      }
-    }
-    ctx.putImageData(imgData, x, y);
   }
 
   function processSequential(arr, fn) {

@@ -261,6 +261,16 @@ main {
   text-align: center;
 }
 
+#output-date {
+  padding: 4px 6px;
+  font-family: inherit;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--bg);
+  color: var(--text);
+}
+
 /* ========== All thumbnails grid ========== */
 #all-thumbnails {
   display: flex;
@@ -456,13 +466,95 @@ body.dark #brush-cursor {
 }
 
 #step2-progress-text,
-#step3-progress-text {
+#step4-progress-text {
   font-size: 12px;
   text-align: center;
   opacity: 0.6;
 }
 
-/* ========== Results (step 3) ========== */
+/* ========== Delete button ========== */
+.btn-delete,
+.card-delete {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+/* ========== Auto total display ========== */
+.auto-total {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ========== Split days input ========== */
+#per-day-count,
+#split-days {
+  width: 56px;
+  padding: 4px 6px;
+  font-family: inherit;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--bg);
+  color: var(--text);
+  text-align: center;
+}
+
+/* ========== Split preview (step 3) ========== */
+#split-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.day-group {
+  border: 1px solid var(--border);
+  padding: 8px;
+}
+
+.day-group.drag-over {
+  border-color: var(--selected);
+  background: var(--drop-bg);
+}
+
+.day-group-header {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.day-group-header .day-count {
+  font-size: 12px;
+  font-weight: 400;
+  opacity: 0.5;
+}
+
+.day-group-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 56px;
+}
+
+.day-group-thumbs img {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  cursor: grab;
+}
+
+.day-group-thumbs img:active {
+  cursor: grabbing;
+}
+
+.day-group-thumbs img.dragging {
+  opacity: 0.3;
+}
+
+/* ========== Results (step 4) ========== */
 #result-list {
   display: flex;
   flex-direction: column;
